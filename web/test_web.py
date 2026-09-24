@@ -77,11 +77,20 @@ class CurveTradeTest(unittest.TestCase):
         self.assertEqual(out["per_leg"][0]["cs01_total_per_1bp"], round(ref.cs01_total, 2))
         self.assertEqual(out["per_leg"][0]["carry_daily"], round(ref.carry_daily, 2))
 
-    def test_exactly_two_legs(self):
+    def test_one_or_two_legs_only(self):
         with self.assertRaises(ValueError):
-            server.price_curve({**self.BODY, "legs": self.BODY["legs"][:1]})
+            server.price_curve({**self.BODY, "legs": []})
         with self.assertRaises(ValueError):
-            server.price_curve({**self.BODY, "legs": self.BODY["legs"] * 2})
+            server.price_curve({**self.BODY, "legs": self.BODY["legs"] + self.BODY["legs"][:1]})
+
+    def test_single_leg_matches_engine_and_has_no_net(self):
+        out = server.price_curve({**self.BODY, "legs": self.BODY["legs"][:1]})
+        self.assertIsNone(out["net"])
+        self.assertEqual(len(out["per_leg"]), 1)
+        # same figures as the leg priced inside the two-leg trade
+        both = server.price_curve(self.BODY)["per_leg"][0]
+        for k in ("upfront_clean_amount", "cs01_total_per_1bp", "carry_daily", "rolldown_1m", "cs01_per_tenor"):
+            self.assertEqual(out["per_leg"][0][k], both[k])
 
 
 if __name__ == "__main__":

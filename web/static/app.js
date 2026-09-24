@@ -395,11 +395,27 @@ const PRESETS = {
   steepener: [{ side: "sell", notional: "10,000,000", tenor: "5Y" }, { side: "buy", notional: "6,400,000", tenor: "10Y" }],
   flattener: [{ side: "buy", notional: "10,000,000", tenor: "5Y" }, { side: "sell", notional: "6,400,000", tenor: "10Y" }],
 };
-$$("[data-preset]").forEach((b) => (b.onclick = () => setLegs(PRESETS[b.dataset.preset])));
-setLegs(PRESETS.steepener);
+// Leg count: with one leg, Leg 2 is hidden and never sent. Always opens on one leg.
+const legCount = () => Number($("input[name=leg_count]:checked", cForm).value);
+function showLegCount() {
+  const n = legCount();
+  $$(".leg", legsRoot).forEach((l, i) => (l.hidden = i >= n));
+  $(".presets", cForm).hidden = n < 2;
+  $("#curve-form button.primary").textContent = n < 2 ? "Price leg" : "Price curve trade";
+}
+function setLegCount(n) {
+  $(`input[name=leg_count][value="${n}"]`, cForm).checked = true;
+  showLegCount();
+}
+$$("input[name=leg_count]", cForm).forEach((r) => r.addEventListener("change", showLegCount));
+$$("[data-preset]").forEach((b) => (b.onclick = () => { setLegs(PRESETS[b.dataset.preset]); setLegCount(2); }));
+
+// Leg 2 starts blank; fill it in (or pick a preset) when you switch to 2 legs.
+setLegs([{ side: "buy", notional: "10,000,000", tenor: "5Y" }, { side: "sell", notional: "", tenor: "", coupon: "" }]);
+setLegCount(1);
 
 bindSubmit(cForm, cOut, () => {
-  const legs = $$(".leg", legsRoot).map((l, i) => {
+  const legs = $$(".leg", legsRoot).slice(0, legCount()).map((l, i) => {
     const read = (cls, label) => {
       const inp = $(cls, l);
       const v = parseNum(inp.value);
@@ -453,7 +469,11 @@ function renderCurve({ per_leg, net, inputs_echo }, { ccy, body }) {
   const d = body.discount;
   const discTxt = d.mode === "flat" ? `${d.flat_rate}% flat` : d.curve.map((p) => `${p.tenor} ${p.value}%`).join(" / ");
   const curveTxt = inputs_echo.credit_curve_bps.map((p) => `${p.tenor} ${p.spread_bps}`).join(" / ");
-  const tenors = net.cs01_per_tenor.map((c) => c.tenor);
+  // One leg: no net block; the headline figures are the leg's own.
+  const two = net != null;
+  const tot = two ? net : per_leg[0];
+  const lab = (s) => (two ? `Net ${s}` : s[0].toUpperCase() + s.slice(1));
+  const tenors = tot.cs01_per_tenor.map((c) => c.tenor);
   const legName = (l) => `${l.side.startsWith("BUY") ? "Buy" : "Sell"} ${compact(inputs_echo.legs[l.leg - 1].notional)} ${l.tenor || l.maturity_date}`;
 
   const legRows = per_leg.map((l) => {
@@ -478,56 +498,58 @@ function renderCurve({ per_leg, net, inputs_echo }, { ccy, body }) {
   cOut.innerHTML = `
     <div class="panel summary">
       <div>
-        <div class="title">${per_leg.length}-leg curve trade · ${per_leg.map((l) => esc(legName(l))).join(" / ")}</div>
+        <div class="title">${two ? "2-leg curve trade" : "Single leg"} · ${per_leg.map((l) => esc(legName(l))).join(" / ")}</div>
         <div class="meta">Credit ${esc(curveTxt)} bp · recovery ${body.recovery_pct}% · rates ${esc(discTxt)} · trade date ${esc(body.trade_date)} · amounts in ${ccy}</div>
       </div>
     </div>
 
     <div class="kpis">
-      <div class="panel kpi"><div class="label">Net upfront (clean, cash)</div>
-        <div class="value">${money(net.upfront_clean_amount, ccy)}${dirTag("cash", net.upfront_clean_amount)}</div>
-        <div class="foot">dirty ${money(net.upfront_dirty_amount, ccy)}</div></div>
-      <div class="panel kpi"><div class="label">Net CS01 (per +1bp parallel)</div>
-        <div class="value">${money(net.cs01_total_per_1bp, ccy)}${dirTag("cs01", net.cs01_total_per_1bp)}</div>
-        <div class="foot">sum of leg CS01s</div></div>
-      <div class="panel kpi"><div class="label">Net carry (30 days)</div>
-        <div class="value">${money(net.carry_monthly_30d, ccy)}${dirTag("gain", net.carry_monthly_30d)}</div>
-        <div class="foot">${money(net.carry_daily, ccy)} per day</div></div>
-      <div class="panel kpi"><div class="label">Net rolldown (1 month)</div>
-        <div class="value">${money(net.rolldown_1m, ccy)}${dirTag("gain", net.rolldown_1m)}</div>
-        <div class="foot">carry + roll 1m ${money(net.carry_plus_roll_1m, ccy)}</div></div>
+      <div class="panel kpi"><div class="label">${lab("upfront (clean, cash)")}</div>
+        <div class="value">${money(tot.upfront_clean_amount, ccy)}${dirTag("cash", tot.upfront_clean_amount)}</div>
+        <div class="foot">dirty ${money(tot.upfront_dirty_amount, ccy)}</div></div>
+      <div class="panel kpi"><div class="label">${lab("CS01 (per +1bp parallel)")}</div>
+        <div class="value">${money(tot.cs01_total_per_1bp, ccy)}${dirTag("cs01", tot.cs01_total_per_1bp)}</div>
+        <div class="foot">${two ? "sum of leg CS01s" : "bump all pillars +1bp, re-bootstrap"}</div></div>
+      <div class="panel kpi"><div class="label">${lab("carry (30 days)")}</div>
+        <div class="value">${money(tot.carry_monthly_30d, ccy)}${dirTag("gain", tot.carry_monthly_30d)}</div>
+        <div class="foot">${money(tot.carry_daily, ccy)} per day</div></div>
+      <div class="panel kpi"><div class="label">${lab("rolldown (1 month)")}</div>
+        <div class="value">${money(tot.rolldown_1m, ccy)}${dirTag("gain", tot.rolldown_1m)}</div>
+        <div class="foot">carry + roll 1m ${money(tot.carry_plus_roll_1m, ccy)}</div></div>
     </div>
 
-    <h2 class="section">Per leg and net <span class="muted">· each leg priced on its own on the shared curve, as the CLI prints it; net = sum of the legs</span></h2>
+    <h2 class="section">${two
+      ? `Per leg and net <span class="muted">· each leg priced on its own on the shared curve, as the CLI prints it; net = sum of the legs</span>`
+      : `Leg <span class="muted">· priced on the full credit curve</span>`}</h2>
     <div class="leg-grid">
       ${per_leg.map((l) => riskCard(`Leg ${l.leg}`, esc(l.display_heading.replace(/^Leg \d+: /, "")), l, ccy, false)).join("")}
-      ${riskCard("Net", `Sum of ${per_leg.length} legs`, net, ccy, true)}
+      ${two ? riskCard("Net", "Sum of 2 legs", net, ccy, true) : ""}
     </div>
 
-    <div class="panel card"><h3>Side by side <span class="muted">· ${ccy}, signed (+ pay / gain)</span></h3>
+    <div class="panel card"><h3>${two ? "Side by side" : "Pricing detail"} <span class="muted">· ${ccy}, signed (+ pay / gain)</span></h3>
       <div class="scroll-x"><table class="data">
         <thead><tr><th>#</th><th>Side</th><th class="num">Notional</th><th>Tenor</th><th>Maturity</th><th class="num">Cpn</th>
           <th class="num">Par bp</th><th class="num">Upfront</th><th class="num">CS01</th><th class="num">Carry 1d</th><th class="num">Carry 30d</th>
           <th class="num">Roll 1d</th><th class="num">Roll 1w</th><th class="num">Roll 1m</th><th class="num">RPV01</th></tr></thead>
         <tbody>${legRows}
-          <tr class="net"><td colspan="7">Net</td>${numCell(net.upfront_clean_amount)}${numCell(net.cs01_total_per_1bp)}
-            ${numCell(net.carry_daily)}${numCell(net.carry_monthly_30d)}${numCell(net.rolldown_1d)}${numCell(net.rolldown_1w)}${numCell(net.rolldown_1m)}<td></td></tr>
+          ${two ? `<tr class="net"><td colspan="7">Net</td>${numCell(net.upfront_clean_amount)}${numCell(net.cs01_total_per_1bp)}
+            ${numCell(net.carry_daily)}${numCell(net.carry_monthly_30d)}${numCell(net.rolldown_1d)}${numCell(net.rolldown_1w)}${numCell(net.rolldown_1m)}<td></td></tr>` : ""}
         </tbody>
       </table></div>
-      <p class="fineprint">Upfront: + = cash this side pays. CS01: + = gains if spreads widen 1bp. Carry / rolldown: + = gain. Net figures are simple sums of the legs.</p>
+      <p class="fineprint">Upfront: + = cash this side pays. CS01: + = gains if spreads widen 1bp. Carry / rolldown: + = gain. ${two ? "Net figures are simple sums of the legs." : ""}</p>
     </div>
 
-    <div class="panel card"><h3>Net CS01 by tenor <span class="muted">· ${ccy} per +1bp on each pillar</span></h3>
-      ${barChart(net.cs01_per_tenor.map((c) => ({ label: c.tenor, v: c.cs01 })), ccy)}
+    <div class="panel card"><h3>${two ? "Net CS01" : "CS01"} by tenor <span class="muted">· ${ccy} per +1bp on each pillar</span></h3>
+      ${barChart(tot.cs01_per_tenor.map((c) => ({ label: c.tenor, v: c.cs01 })), ccy)}
     </div>
 
-    <div class="panel card"><h3>CS01 bucket matrix <span class="muted">· ${ccy} per +1bp</span></h3>
+    ${two ? `    <div class="panel card"><h3>CS01 bucket matrix <span class="muted">· ${ccy} per +1bp</span></h3>
       <div class="scroll-x"><table class="data">
         <thead><tr><th>Leg</th>${tenors.map((t) => `<th class="num">${esc(t)}</th>`).join("")}<th class="num">Total</th></tr></thead>
         <tbody>${bucketRows}
           <tr class="net"><td>Net</td>${net.cs01_per_tenor.map((c) => numCell(c.cs01)).join("")}${numCell(net.cs01_total_per_1bp)}</tr>
         </tbody>
       </table></div>
-    </div>`;
+    </div>` : ""}`;
   $$("svg.chart", cOut).forEach(bindTips);
 }

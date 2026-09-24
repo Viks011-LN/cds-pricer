@@ -86,6 +86,10 @@
         <div class="disc" data-scope="curve"></div>
 
         <h2>Legs</h2>
+        <div class="seg small" role="radiogroup" aria-label="Number of legs">
+          <input type="radio" name="leg_count" id="lc-1" value="1" checked><label for="lc-1">1 leg</label>
+          <input type="radio" name="leg_count" id="lc-2" value="2"><label for="lc-2">2 legs (curve trade)</label>
+        </div>
         <div class="presets">
           <span class="muted">Presets:</span>
           <button type="button" class="chip" data-preset="steepener">5s10s steepener</button>
@@ -98,8 +102,8 @@
 
       <div class="results" id="curve-results">
         <div class="empty">
-          <p>Build a two-leg trade on one credit curve and press <strong>Price curve trade</strong>.</p>
-          <p class="muted">Legs are priced through the same <code>price_curve_trade</code> path the terminal agent uses.</p>
+          <p>Price one leg on a full credit curve, or switch to <strong>2 legs</strong> for a curve trade.</p>
+          <p class="muted">One leg is priced through the terminal agent's <code>price_cds</code> path, two legs through <code>price_curve_trade</code>.</p>
         </div>
       </div>
     </section>

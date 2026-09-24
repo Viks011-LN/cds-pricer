@@ -147,8 +147,8 @@ NET_FIELDS = (
 
 def price_curve(body: dict) -> dict:
     legs_in = body.get("legs")
-    if not isinstance(legs_in, list) or len(legs_in) != 2:
-        raise ValueError("a curve trade takes exactly two legs")
+    if not isinstance(legs_in, list) or len(legs_in) not in (1, 2):
+        raise ValueError("price one or two legs")
     legs = []
     for i, leg in enumerate(legs_in, start=1):
         try:
@@ -177,6 +177,8 @@ def price_curve(body: dict) -> dict:
         "defaulted_inputs": [],
         "legs": legs,
     }
+    if len(legs) == 1:
+        return _price_one_leg(args)
     out = json.loads(cds_agent.execute_price_curve_trade(args))
     if "error" in out:
         raise ValueError(out["error"])
@@ -192,6 +194,45 @@ def price_curve(body: dict) -> dict:
         for t, p in ((c["tenor"], c) for c in args["credit_curve"])
     ]
     return {**out, "net": net}
+
+
+def _price_one_leg(args: dict) -> dict:
+    """One leg on the full credit curve, via the agent's price_cds path.
+
+    price_curve_trade refuses a single leg, so this uses the single-trade
+    executor and returns it in the same per_leg shape, with no net block.
+    """
+    leg = args["legs"][0]
+    single = {k: v for k, v in args.items() if k != "legs"}
+    out = json.loads(cds_agent.execute_price_cds({**single, **leg}))
+    if "error" in out:
+        raise ValueError(out["error"])
+    echo, res = out["inputs_echo"], out["results"]
+    word = "BUY" if leg["buy_protection"] else "SELL"
+    heading = (
+        f"Leg 1: {word} protection {leg['notional']:,.0f} {leg['tenor'] or res['maturity_date']}, "
+        f"matures {res['maturity_date']}, coupon {leg['coupon_bps']:g}bp"
+    )
+    return {
+        "inputs_echo": {
+            **{k: echo[k] for k in ("trade_date", "recovery_pct", "credit_curve_bps", "rate_curve_pct")},
+            "leg_count": 1,
+            "legs": [
+                {
+                    "leg": 1,
+                    "tenor": echo["tenor"],
+                    "maturity_date": echo["maturity_date"],
+                    "side": echo["side"],
+                    "notional": echo["notional"],
+                    "coupon_bps": echo["coupon_bps"],
+                }
+            ],
+        },
+        "per_leg": [
+            {"leg": 1, "display_heading": heading, "tenor": echo["tenor"], "side": echo["side"], **res}
+        ],
+        "net": None,
+    }
 
 
 ROUTES = {"/api/price": price_single, "/api/curve-trade": price_curve}
