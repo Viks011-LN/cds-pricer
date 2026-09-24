@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "isda-cds"
+dynamic = ["version"]
+description = "Pure-Python ISDA CDS Standard Model pricing engine (O'Kane-Turnbull, Markit 2012 fix)"
+readme = "README.md"
+requires-python = ">=3.10"
+# The core isda_cds package is standard library only: no runtime dependencies.
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Office/Business :: Financial",
+]
+
+[project.optional-dependencies]
+# Test runner for test_pricer.py, test_agent_mock.py and web/test_web.py.
+test = ["pytest>=7"]
+# The web front end (web/server.py) uses only the standard library
+# (http.server), so it needs nothing extra. The group exists so
+# `pip install -e ".[web]"` works; it installs nothing.
+web = []
+# quantlib_crosscheck.py only: external validation against QuantLib's
+# IsdaCdsEngine. QuantLib is a large compiled dependency and is never needed
+# to price, so it is kept out of the core install.
+validation = ["QuantLib"]
+
+[tool.setuptools]
+# Only the engine is packaged. cds_agent.py, web/, example.py and
+# quantlib_crosscheck.py are scripts that run from a checkout of the repo.
+packages = ["isda_cds"]
+
+[tool.setuptools.dynamic]
+version = { attr = "isda_cds.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["test_pricer.py", "test_agent_mock.py", "web/test_web.py"]
+# test_agent_mock imports cds_agent from the repo root
+pythonpath = ["."]
+addopts = "-ra"
