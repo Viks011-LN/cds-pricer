@@ -31,7 +31,15 @@ STATIC = Path(__file__).resolve().parent / "static"
 sys.path.insert(0, str(ROOT))
 
 import cds_agent  # noqa: E402 — the curve-trade path lives here
-from isda_cds import CurvePoint, PricerRequest, run_pricer  # noqa: E402
+from isda_cds import (  # noqa: E402
+    CurvePoint,
+    PricerRequest,
+    parse_iso,
+    run_pricer,
+    standard_cds_maturity,
+    tenor_to_months,
+    to_iso,
+)
 
 MAX_BODY = 256 * 1024
 CONTENT_TYPES = {
@@ -235,7 +243,23 @@ def _price_one_leg(args: dict) -> dict:
     }
 
 
-ROUTES = {"/api/price": price_single, "/api/curve-trade": price_curve}
+def maturities(body: dict) -> dict:
+    """Standard CDS maturity for each tenor, from the engine's own date rule.
+
+    Used to pre-fill the maturity fields; tenors the engine can't parse map to None.
+    """
+    trade_date = parse_iso(str(body.get("trade_date") or ""))
+    out: dict[str, str | None] = {}
+    for tenor in body.get("tenors") or []:
+        t = str(tenor).strip().upper()
+        try:
+            out[t] = to_iso(standard_cds_maturity(trade_date, tenor_to_months(t)))
+        except ValueError:
+            out[t] = None
+    return {"maturities": out}
+
+
+ROUTES = {"/api/price": price_single, "/api/curve-trade": price_curve, "/api/maturity": maturities}
 
 
 class Handler(BaseHTTPRequestHandler):

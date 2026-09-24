@@ -42,6 +42,24 @@ class SingleTradeTest(unittest.TestCase):
             server.price_single({**BASE, "tenor": None})
 
 
+class MaturityTest(unittest.TestCase):
+    def test_matches_engine_maturity(self):
+        out = server.maturities({"trade_date": "2026-07-21", "tenors": ["5Y", "3y", "bad"]})["maturities"]
+        self.assertEqual(out["5Y"], run_pricer(PricerRequest(**{**_REQ, "tenor": "5Y"})).maturity_date)
+        self.assertEqual(out["3Y"], "2029-06-20")
+        self.assertIsNone(out["BAD"])
+
+    def test_custom_maturity_overrides_tenor(self):
+        out = server.price_single({**BASE, "maturity_date": "2032-06-20"})["result"]
+        self.assertEqual(out["maturity_date"], "2032-06-20")
+
+
+_REQ = dict(
+    trade_date="2026-07-21", coupon_bps=100, notional=10_000_000, recovery_pct=40, buy_protection=True,
+    credit_curve=[CurvePoint("5Y", 160)], rate_curve=[CurvePoint("1Y", 3.5), CurvePoint("10Y", 3.5)],
+)
+
+
 class CurveTradeTest(unittest.TestCase):
     BODY = {
         "trade_date": "2026-07-21",

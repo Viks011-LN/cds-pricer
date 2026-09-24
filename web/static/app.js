@@ -147,6 +147,39 @@ async function post(url, body) {
   return data;
 }
 
+/**
+ * Keeps a maturity date box filled with the engine's standard maturity for the
+ * tenor and trade date (via /api/maturity). Changing the tenor or trade date
+ * refills it; typing over it makes it a custom maturity, which is then sent
+ * to the pricer and overrides the tenor.
+ */
+function maturityFiller(tenorEl, matEl, noteEl, tradeDateEl) {
+  let seq = 0, timer = 0;
+  const custom = () => !!matEl.value && matEl.value !== (matEl.dataset.auto || "");
+  const mark = () => {
+    noteEl.textContent = custom() ? "custom" : matEl.value ? "auto" : "";
+    noteEl.classList.toggle("custom", custom());
+  };
+  const refill = async () => {
+    const tenor = tenorEl.value.trim().toUpperCase();
+    const mine = ++seq;
+    let m = "";
+    if (tenor && tradeDateEl.value) {
+      try {
+        m = (await post("/api/maturity", { trade_date: tradeDateEl.value, tenors: [tenor] })).maturities[tenor] || "";
+      } catch (_) { /* leave blank; pricing reports the real error */ }
+    }
+    if (mine !== seq) return; // a newer tenor/date change won
+    matEl.value = m;
+    matEl.dataset.auto = m;
+    mark();
+  };
+  tenorEl.addEventListener("change", refill);
+  tenorEl.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(refill, 300); });
+  matEl.addEventListener("input", mark);
+  return { refill, custom };
+}
+
 function bindSubmit(form, out, build, render) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -258,15 +291,16 @@ const sForm = $("#single-form");
 const sOut = $("#single-results");
 sForm.elements.trade_date.value = todayIso();
 const sDisc = discountEditor("single");
-sForm.elements.tenor.addEventListener("change", (e) => {
-  $(".maturity-field", sForm).hidden = e.target.value !== "";
-});
+const sMat = maturityFiller(sForm.elements.tenor, sForm.elements.maturity_date, $(".mat-note", sForm), sForm.elements.trade_date);
+sForm.elements.trade_date.addEventListener("change", sMat.refill);
+sMat.refill();
 bindSubmit(sForm, sOut, () => {
   const f = sForm.elements;
   const body = {
     trade_date: f.trade_date.value,
-    tenor: f.tenor.value || null,
-    maturity_date: f.tenor.value ? null : f.maturity_date.value,
+    tenor: f.tenor.value,
+    // tenor still sets the flat curve pillar; a custom maturity only moves the end date
+    maturity_date: sMat.custom() ? f.maturity_date.value : null,
     notional: num(sForm, "notional", "Notional"),
     traded_spread_bps: num(sForm, "traded_spread_bps", "Traded spread"),
     coupon_bps: Number(f.coupon_bps.value),
@@ -291,7 +325,7 @@ function renderSingle({ result: r, curve_used }, { ccy, body }) {
     <div class="panel summary">
       <div>
         <div class="title"><span class="badge ${side}">${side === "buy" ? "BUY PROTECTION" : "SELL PROTECTION"}</span>
-          &nbsp;${ccy} ${compact(body.notional)} ${esc(body.tenor || "")} · matures ${esc(r.maturity_date)}</div>
+          &nbsp;${ccy} ${compact(body.notional)} ${esc(body.tenor)} · matures ${esc(r.maturity_date)}${body.maturity_date ? " (custom)" : ""}</div>
         <div class="meta">Coupon ${body.coupon_bps}bp · recovery ${body.recovery_pct}% · credit ${esc(curveTxt)} · rates ${esc(discTxt)} · trade date ${esc(body.trade_date)}</div>
       </div>
     </div>
@@ -379,11 +413,14 @@ function addLeg({ side = "buy", notional = "10,000,000", tenor = "5Y", coupon = 
       <input type="radio" name="leg${id}-side" id="leg${id}-b" value="buy" ${side === "buy" ? "checked" : ""}><label for="leg${id}-b">Buy protection</label>
       <input type="radio" name="leg${id}-side" id="leg${id}-s" value="sell" ${side === "sell" ? "checked" : ""}><label for="leg${id}-s">Sell protection</label>
     </div>
-    <div class="grid3">
+    <div class="grid2">
       <label>Notional<input class="l-notional" inputmode="decimal" value="${esc(notional)}"></label>
-      <label>Tenor<input class="l-tenor" value="${esc(tenor)}"></label>
       <label>Coupon bp<input class="l-coupon" inputmode="decimal" value="${esc(coupon)}"></label>
+      <label>Tenor<input class="l-tenor" placeholder="e.g. 5Y" value="${esc(tenor)}"></label>
+      <label><span>Maturity <span class="unit mat-note"></span></span><input class="l-maturity" type="date"></label>
     </div>`;
+  el._mat = maturityFiller($(".l-tenor", el), $(".l-maturity", el), $(".mat-note", el), cForm.elements.trade_date);
+  el._mat.refill();
   legsRoot.append(el);
   renumber();
 }
@@ -407,6 +444,7 @@ function setLegCount(n) {
   $(`input[name=leg_count][value="${n}"]`, cForm).checked = true;
   showLegCount();
 }
+cForm.elements.trade_date.addEventListener("change", () => $$(".leg", legsRoot).forEach((l) => l._mat.refill()));
 $$("input[name=leg_count]", cForm).forEach((r) => r.addEventListener("change", showLegCount));
 $$("[data-preset]").forEach((b) => (b.onclick = () => { setLegs(PRESETS[b.dataset.preset]); setLegCount(2); }));
 
@@ -427,6 +465,7 @@ bindSubmit(cForm, cOut, () => {
       buy_protection: $("input:checked", l).value === "buy",
       notional: read(".l-notional", "notional"),
       tenor: $(".l-tenor", l).value.trim().toUpperCase(),
+      maturity_date: l._mat.custom() ? $(".l-maturity", l).value : null,
       coupon_bps: read(".l-coupon", "coupon"),
     };
   });

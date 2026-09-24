@@ -42,10 +42,10 @@
           <label>Tenor
             <select name="tenor">
               <option>6M</option><option>1Y</option><option>2Y</option><option>3Y</option><option>4Y</option>
-              <option selected>5Y</option><option>7Y</option><option>10Y</option><option value="">Custom date…</option>
+              <option selected>5Y</option><option>7Y</option><option>10Y</option>
             </select>
           </label>
-          <label class="maturity-field" hidden>Maturity<input type="date" name="maturity_date"></label>
+          <label><span>Maturity <span class="unit mat-note"></span></span><input type="date" name="maturity_date"></label>
           <label>Trade date<input type="date" name="trade_date"></label>
           <label><span>Traded spread <span class="unit">bp</span></span><input name="traded_spread_bps" inputmode="decimal" value="160"></label>
           <label>Running coupon

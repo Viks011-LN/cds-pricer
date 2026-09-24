@@ -43,13 +43,14 @@ python3 web/server.py --host 0.0.0.0        # reachable from other machines on y
 python3 -m unittest web.test_web -v         # API tests
 ```
 
-- **Single trade** — side, notional, currency, tenor (or a custom maturity date), trade date, traded spread, running coupon, recovery, and a discount curve (flat zero rate by default, or a zero-rate term curve). The traded spread becomes a single credit-curve pillar at the trade tenor, as in the CLI. Shows upfront (clean, dirty, accrued, as cash with pay/receive), prices, par spread, RPV01, protection and premium legs, survival to maturity, CS01 (total and by tenor), carry, and 1d/1w/1m rolldown, plus the bootstrapped survival curve.
+- **Single trade** — side, notional, currency, tenor, maturity, trade date, traded spread, running coupon, recovery, and a discount curve (flat zero rate by default, or a zero-rate term curve). The traded spread becomes a single credit-curve pillar at the trade tenor, as in the CLI. Shows upfront (clean, dirty, accrued, as cash with pay/receive), prices, par spread, RPV01, protection and premium legs, survival to maturity, CS01 (total and by tenor), carry, and 1d/1w/1m rolldown, plus the bootstrapped survival curve.
 - **Curve trade** — one or two legs on a full credit curve. A **1 leg / 2 legs** switch picks the mode; it defaults to one leg, where Leg 2 is hidden and ignored. One leg is priced through `cds_agent.execute_price_cds` (the agent's `price_cds` tool), two legs through `cds_agent.execute_price_curve_trade` (`price_curve_trade`). Two-leg presets: 5s10s steepener and flattener, notionals roughly CS01-neutral on the default curve. With two legs, the page shows each leg on its own, as the CLI does (upfront, CS01 total and by tenor, carry, rolldown), next to a **net** block with the same figures summed across the legs. A side-by-side table and a CS01 bucket matrix (leg × tenor, with a net row) are shown below. With one leg, only that leg's figures are shown (no net).
+- **Maturity** — picking or typing a tenor (or changing the trade date) fills in the maturity with the engine's own standard CDS maturity rule (`standard_cds_maturity`, semiannual roll). It stays editable: type over it and it is marked *custom* and overrides the tenor for that trade or leg.
 - Currency is a display label only; the engine does not depend on currency.
 
 | File | Contents |
 |---|---|
-| `web/server.py` | JSON API (`POST /api/price`, `POST /api/curve-trade`) and static file server |
+| `web/server.py` | JSON API (`POST /api/price`, `POST /api/curve-trade`, `POST /api/maturity`) and static file server |
 | `web/static/` | `index.html`, `style.css`, `app.js`: the single-page app (light and dark themes, mobile-friendly) |
 | `web/test_web.py` | Checks the API against the engine: identical numbers, legs match single-trade pricing, net = sum of legs |
 
