@@ -57,20 +57,6 @@
         <h2>Discount curve</h2>
         <div class="disc" data-scope="single"></div>
 
-        <h2>Mark to market <span class="hint">optional</span></h2>
-        <div class="seg small" role="radiogroup" aria-label="Market">
-          <input type="radio" name="market_mode" id="m-none" value="none" checked><label for="m-none">At traded spread</label>
-          <input type="radio" name="market_mode" id="m-flat" value="flat"><label for="m-flat">Market spread</label>
-          <input type="radio" name="market_mode" id="m-curve" value="curve"><label for="m-curve">Market curve</label>
-        </div>
-        <div class="market-flat" hidden>
-          <label><span>Current spread <span class="unit">bp</span></span><input name="market_spread_bps" inputmode="decimal" value="170"></label>
-        </div>
-        <div class="market-curve" hidden>
-          <div class="curve-editor" id="single-market-curve"></div>
-        </div>
-        <p class="fineprint">MTM P&amp;L compares the clean upfront at market against the clean upfront at the traded spread, same valuation date. Risk and carry are then measured on the market curve.</p>
-
         <button class="primary" type="submit">Price trade</button>
       </form>
 

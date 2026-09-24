@@ -100,29 +100,16 @@ def _tenor_or_maturity(d: dict) -> tuple[str | None, str | None]:
 def price_single(body: dict) -> dict:
     """Price one trade.
 
-    The engine prices off a credit curve; a single quoted spread becomes one
-    pillar at the trade tenor (the same convention the CLI uses). If a
-    current market spread/curve is supplied, analytics are on the market
-    curve and MTM P&L = clean upfront at market - clean upfront at the traded
-    spread (both from run_pricer, same valuation date, signed for the side).
+    The engine prices off a credit curve; the traded spread becomes one
+    pillar at the trade tenor (the same convention the CLI uses for a single
+    quoted spread).
     """
     tenor, maturity = _tenor_or_maturity(body)
-    traded = _num(body, "traded_spread_bps", positive=True)
     rates = _rate_curve(body)
     pillar = tenor or "5Y"  # maturity-only trades: anchor the flat pillar at 5Y
-    traded_curve = [CurvePoint(pillar, traded)]
-
-    market = body.get("market") or {}
-    mode = market.get("mode", "none")
-    if mode == "flat":
-        market_curve = [CurvePoint(pillar, _num(market, "spread_bps", positive=True))]
-    elif mode == "curve":
-        market_curve = _curve(market.get("curve"), "market credit curve")
-    else:
-        market_curve = None
-
-    def req(curve):
-        return PricerRequest(
+    credit = [CurvePoint(pillar, _num(body, "traded_spread_bps", positive=True))]
+    result = run_pricer(
+        PricerRequest(
             trade_date=str(body.get("trade_date") or ""),
             tenor=tenor,
             maturity_date=maturity,
@@ -130,23 +117,13 @@ def price_single(body: dict) -> dict:
             notional=_num(body, "notional", positive=True),
             recovery_pct=_recovery(body),
             buy_protection=bool(body.get("buy_protection", True)),
-            credit_curve=curve,
+            credit_curve=credit,
             rate_curve=rates,
         )
-
-    at_trade = run_pricer(req(traded_curve))
-    result = run_pricer(req(market_curve)) if market_curve else at_trade
-    mtm = None
-    if market_curve:
-        mtm = {
-            "pnl": result.upfront_amount - at_trade.upfront_amount,
-            "upfront_at_traded": at_trade.upfront_amount,
-            "upfront_at_market": result.upfront_amount,
-        }
+    )
     return {
         "result": asdict(result),
-        "mtm": mtm,
-        "curve_used": [asdict(p) for p in (market_curve or traded_curve)],
+        "curve_used": [asdict(p) for p in credit],
         "rate_curve": [asdict(p) for p in rates],
     }
 

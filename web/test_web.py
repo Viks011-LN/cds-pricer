@@ -35,20 +35,6 @@ class SingleTradeTest(unittest.TestCase):
         self.assertEqual(out["upfront_amount"], ref.upfront_amount)
         self.assertEqual(out["cs01_total"], ref.cs01_total)
 
-    def test_no_market_means_no_mtm(self):
-        self.assertIsNone(server.price_single(dict(BASE))["mtm"])
-
-    def test_mtm_sign_follows_side(self):
-        wider = {"mode": "flat", "spread_bps": 170}
-        buy = server.price_single({**BASE, "market": wider})["mtm"]["pnl"]
-        sell = server.price_single({**BASE, "buy_protection": False, "market": wider})["mtm"]["pnl"]
-        self.assertGreater(buy, 0)  # protection buyer gains when spreads widen
-        self.assertAlmostEqual(buy, -sell, places=6)
-
-    def test_market_curve_used_for_risk(self):
-        out = server.price_single({**BASE, "market": {"mode": "curve", "curve": CURVE}})
-        self.assertEqual(len(out["result"]["cs01_per_tenor"]), 4)
-
     def test_bad_input_raises(self):
         with self.assertRaises(ValueError):
             server.price_single({**BASE, "notional": "abc"})
@@ -74,6 +60,22 @@ class CurveTradeTest(unittest.TestCase):
         for k in ("cs01_total_per_1bp", "carry_daily", "rolldown_1m"):
             self.assertAlmostEqual(out["net"][k], sum(l[k] for l in out["per_leg"]), places=2)
         self.assertEqual([b["tenor"] for b in out["net"]["cs01_per_tenor"]], ["1Y", "3Y", "5Y", "10Y"])
+
+    def test_net_buckets_are_sum_of_leg_buckets(self):
+        out = server.price_curve(self.BODY)
+        for b in out["net"]["cs01_per_tenor"]:
+            legs = sum(c["cs01"] for l in out["per_leg"] for c in l["cs01_per_tenor"] if c["tenor"] == b["tenor"])
+            self.assertAlmostEqual(b["cs01"], legs, places=2)
+
+    def test_legs_match_single_trade_path(self):
+        out = server.price_curve(self.BODY)
+        leg = self.BODY["legs"][0]
+        ref = run_pricer(PricerRequest(
+            trade_date="2026-07-21", tenor=leg["tenor"], coupon_bps=100, notional=leg["notional"],
+            recovery_pct=40, buy_protection=False, credit_curve=[CurvePoint(p["tenor"], p["value"]) for p in CURVE],
+            rate_curve=[CurvePoint("1Y", 3.5), CurvePoint("10Y", 3.7)]))
+        self.assertEqual(out["per_leg"][0]["cs01_total_per_1bp"], round(ref.cs01_total, 2))
+        self.assertEqual(out["per_leg"][0]["carry_daily"], round(ref.carry_daily, 2))
 
     def test_needs_two_legs(self):
         with self.assertRaises(ValueError):

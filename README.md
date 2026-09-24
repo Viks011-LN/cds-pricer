@@ -43,17 +43,15 @@ python3 web/server.py --host 0.0.0.0        # reachable from other machines on y
 python3 -m unittest web.test_web -v         # API tests
 ```
 
-- **Single trade** — side, notional, currency, tenor (or a custom maturity date), trade date, traded spread, running coupon, recovery, and a discount curve (flat zero rate by default, or a zero-rate term curve). Shows upfront (clean, dirty, accrued, as cash with pay/receive), prices, par spread, RPV01, protection and premium legs, survival to maturity, CS01 (total and by tenor), carry, and 1d/1w/1m rolldown, plus the bootstrapped survival curve.
-  - The traded spread becomes a single credit-curve pillar at the trade tenor, as in the CLI.
-  - **MTM P&L** (optional): enter a current market spread or a market credit curve. The P&L is the clean upfront at market minus the clean upfront at the traded spread, both from `run_pricer` on the same valuation date and signed for the trade side. Risk, carry and rolldown are then measured on the market curve.
-- **Curve trade** — two or more legs on one shared credit curve (steepeners, flatteners, butterflies; presets included, notionals roughly CS01-neutral on the default curve). Each leg is priced through `cds_agent.execute_price_curve_trade`, the path behind the agent's `price_curve_trade` tool. The page shows per-leg results, net figures (plain sums of the legs: upfront, CS01, carry, rolldown), and a CS01 bucket matrix by tenor.
+- **Single trade** — side, notional, currency, tenor (or a custom maturity date), trade date, traded spread, running coupon, recovery, and a discount curve (flat zero rate by default, or a zero-rate term curve). The traded spread becomes a single credit-curve pillar at the trade tenor, as in the CLI. Shows upfront (clean, dirty, accrued, as cash with pay/receive), prices, par spread, RPV01, protection and premium legs, survival to maturity, CS01 (total and by tenor), carry, and 1d/1w/1m rolldown, plus the bootstrapped survival curve.
+- **Curve trade** — two or more legs on one shared credit curve (steepeners, flatteners, butterflies; presets included, notionals roughly CS01-neutral on the default curve). Each leg is priced through `cds_agent.execute_price_curve_trade`, the path behind the agent's `price_curve_trade` tool. The page shows each leg on its own, as the CLI does (upfront, CS01 total and by tenor, carry, rolldown), next to a **net** block with the same figures summed across the legs. A side-by-side table and a CS01 bucket matrix (leg × tenor, with a net row) are shown below.
 - Currency is a display label only; the engine does not depend on currency.
 
 | File | Contents |
 |---|---|
 | `web/server.py` | JSON API (`POST /api/price`, `POST /api/curve-trade`) and static file server |
 | `web/static/` | `index.html`, `style.css`, `app.js`: the single-page app (light and dark themes, mobile-friendly) |
-| `web/test_web.py` | Checks the API against the engine: identical numbers, MTM sign, net = sum of legs |
+| `web/test_web.py` | Checks the API against the engine: identical numbers, legs match single-trade pricing, net = sum of legs |
 
 ## Package layout
 

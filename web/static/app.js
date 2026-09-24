@@ -38,7 +38,7 @@ const compact = (v) => {
 // Direction words, so a sign never has to be interpreted by the reader.
 const DIR = {
   cash: (v) => (v > 0 ? ["Pay", "bad"] : v < 0 ? ["Receive", "good"] : ["Nil", "flat"]),
-  pnl: (v) => (v > 0 ? ["Gain", "good"] : v < 0 ? ["Loss", "bad"] : ["Flat", "flat"]),
+  gain: (v) => (v > 0 ? ["Gain", "good"] : v < 0 ? ["Loss", "bad"] : ["Flat", "flat"]),
   cs01: (v) => (v > 0 ? ["Gain if wider", "good"] : v < 0 ? ["Loss if wider", "bad"] : ["Flat", "flat"]),
 };
 const dirTag = (kind, v) => {
@@ -258,25 +258,11 @@ const sForm = $("#single-form");
 const sOut = $("#single-results");
 sForm.elements.trade_date.value = todayIso();
 const sDisc = discountEditor("single");
-const sMarket = curveEditor($("#single-market-curve"),
-  [["1Y", "85"], ["3Y", "125"], ["5Y", "170"], ["7Y", "190"], ["10Y", "210"]], "Spread bp");
-
 sForm.elements.tenor.addEventListener("change", (e) => {
   $(".maturity-field", sForm).hidden = e.target.value !== "";
 });
-$$("input[name=market_mode]", sForm).forEach((r) =>
-  r.addEventListener("change", () => {
-    $(".market-flat", sForm).hidden = r.value !== "flat" || !r.checked;
-    $(".market-curve", sForm).hidden = r.value !== "curve" || !r.checked;
-  }),
-);
-
 bindSubmit(sForm, sOut, () => {
   const f = sForm.elements;
-  const mode = $("input[name=market_mode]:checked", sForm).value;
-  const market = { mode };
-  if (mode === "flat") market.spread_bps = num(sForm, "market_spread_bps", "Current spread");
-  if (mode === "curve") market.curve = sMarket.get();
   const body = {
     trade_date: f.trade_date.value,
     tenor: f.tenor.value || null,
@@ -287,13 +273,12 @@ bindSubmit(sForm, sOut, () => {
     recovery_pct: num(sForm, "recovery_pct", "Recovery"),
     buy_protection: $("input[name=side]:checked", sForm).value === "buy",
     discount: sDisc(),
-    market,
   };
   sForm._ctx = { ccy: f.currency.value, body };
   return ["/api/price", body];
 }, (data) => renderSingle(data, sForm._ctx));
 
-function renderSingle({ result: r, mtm, curve_used }, { ccy, body }) {
+function renderSingle({ result: r, curve_used }, { ccy, body }) {
   const side = body.buy_protection ? "buy" : "sell";
   const cs01Rows = r.cs01_per_tenor.map((c) => ({ label: c.tenor, v: c.cs01 }));
   const curveTxt = curve_used.length === 1
@@ -301,11 +286,6 @@ function renderSingle({ result: r, mtm, curve_used }, { ccy, body }) {
     : curve_used.map((p) => `${p.tenor} ${p.value}`).join(" / ");
   const d = body.discount;
   const discTxt = d.mode === "flat" ? `${d.flat_rate}% flat` : d.curve.map((p) => `${p.tenor} ${p.value}%`).join(" / ");
-
-  const mtmKpi = mtm
-    ? `<div class="value">${money(mtm.pnl, ccy)}${dirTag("pnl", mtm.pnl)}</div>
-       <div class="foot">traded ${f2.format(body.traded_spread_bps)}bp → market ${esc(curveTxt)}</div>`
-    : `<div class="value">${ccy} 0.00</div><div class="foot">priced at the traded spread — add a market level to mark it</div>`;
 
   sOut.innerHTML = `
     <div class="panel summary">
@@ -320,7 +300,9 @@ function renderSingle({ result: r, mtm, curve_used }, { ccy, body }) {
       <div class="panel kpi"><div class="label">Upfront (clean, cash)</div>
         <div class="value">${money(r.upfront_amount, ccy)}${dirTag("cash", r.upfront_amount)}</div>
         <div class="foot">${f4.format(Math.abs(r.upfront_pct))}% of notional · price ${f4.format(r.clean_price)}</div></div>
-      <div class="panel kpi"><div class="label">MTM P&amp;L</div>${mtmKpi}</div>
+      <div class="panel kpi"><div class="label">Par spread</div>
+        <div class="value">${f2.format(r.par_spread_bps)} bp</div>
+        <div class="foot">traded ${f2.format(body.traded_spread_bps)}bp · coupon ${body.coupon_bps}bp</div></div>
       <div class="panel kpi"><div class="label">CS01 (per +1bp parallel)</div>
         <div class="value">${money(r.cs01_total, ccy)}${dirTag("cs01", r.cs01_total)}</div>
         <div class="foot">bump all pillars +1bp, re-bootstrap</div></div>
@@ -346,13 +328,13 @@ function renderSingle({ result: r, mtm, curve_used }, { ccy, body }) {
 
       <div class="panel card"><h3>Carry &amp; rolldown <span class="muted">· static curves, no default</span></h3>
         <table class="kv">
-          <tr><td>Carry, 1 day</td><td>${money(r.carry_daily, ccy)} ${dirTag("pnl", r.carry_daily)}</td></tr>
-          <tr><td>Carry, 30 days</td><td>${money(r.carry_monthly, ccy)} ${dirTag("pnl", r.carry_monthly)}</td></tr>
-          <tr><td>Rolldown, 1 day</td><td>${money(r.rolldown_1d, ccy)} ${dirTag("pnl", r.rolldown_1d)}</td></tr>
-          <tr><td>Rolldown, 1 week</td><td>${money(r.rolldown_1w, ccy)} ${dirTag("pnl", r.rolldown_1w)}</td></tr>
-          <tr><td>Rolldown, 1 month</td><td>${money(r.rolldown_1m, ccy)} ${dirTag("pnl", r.rolldown_1m)}</td></tr>
-          <tr><td>Carry + roll, 1 day</td><td>${money(r.carry_daily + r.rolldown_1d, ccy)} ${dirTag("pnl", r.carry_daily + r.rolldown_1d)}</td></tr>
-          <tr><td>Carry + roll, 1 month</td><td>${money(r.carry_monthly + r.rolldown_1m, ccy)} ${dirTag("pnl", r.carry_monthly + r.rolldown_1m)}</td></tr>
+          <tr><td>Carry, 1 day</td><td>${money(r.carry_daily, ccy)} ${dirTag("gain", r.carry_daily)}</td></tr>
+          <tr><td>Carry, 30 days</td><td>${money(r.carry_monthly, ccy)} ${dirTag("gain", r.carry_monthly)}</td></tr>
+          <tr><td>Rolldown, 1 day</td><td>${money(r.rolldown_1d, ccy)} ${dirTag("gain", r.rolldown_1d)}</td></tr>
+          <tr><td>Rolldown, 1 week</td><td>${money(r.rolldown_1w, ccy)} ${dirTag("gain", r.rolldown_1w)}</td></tr>
+          <tr><td>Rolldown, 1 month</td><td>${money(r.rolldown_1m, ccy)} ${dirTag("gain", r.rolldown_1m)}</td></tr>
+          <tr><td>Carry + roll, 1 day</td><td>${money(r.carry_daily + r.rolldown_1d, ccy)} ${dirTag("gain", r.carry_daily + r.rolldown_1d)}</td></tr>
+          <tr><td>Carry + roll, 1 month</td><td>${money(r.carry_monthly + r.rolldown_1m, ccy)} ${dirTag("gain", r.carry_monthly + r.rolldown_1m)}</td></tr>
         </table>
         <p class="fineprint">${esc(r.carry_note)} Rolldown re-anchors both curves at the horizon (same tenor quotes) and reprices; carry excluded.</p>
       </div>
@@ -453,6 +435,30 @@ bindSubmit(cForm, cOut, () => {
   return ["/api/curve-trade", body];
 }, (data) => renderCurve(data, cForm._ctx));
 
+/** One block of risk figures — used for every leg and, with the same layout, for the net. */
+function riskCard(title, sub, x, ccy, isNet) {
+  const row = (label, v, kind) => `<tr><td>${label}</td><td>${money(v, ccy)} ${dirTag(kind, v)}</td></tr>`;
+  return `<div class="panel card leg-card${isNet ? " net-card" : ""}">
+    <h3>${title}</h3>
+    <div class="leg-sub">${sub}</div>
+    <table class="kv">
+      ${row("Upfront (clean, cash)", x.upfront_clean_amount, "cash")}
+      ${row("CS01, per +1bp parallel", x.cs01_total_per_1bp, "cs01")}
+      ${row("Carry, 1 day", x.carry_daily, "gain")}
+      ${row("Carry, 30 days", x.carry_monthly_30d, "gain")}
+      ${row("Rolldown, 1 day", x.rolldown_1d, "gain")}
+      ${row("Rolldown, 1 week", x.rolldown_1w, "gain")}
+      ${row("Rolldown, 1 month", x.rolldown_1m, "gain")}
+      ${row("Carry + roll, 1 day", x.carry_plus_roll_1d, "gain")}
+      ${row("Carry + roll, 1 month", x.carry_plus_roll_1m, "gain")}
+    </table>
+    <div class="leg-sub" style="margin-top:12px">CS01 by tenor (${ccy} per +1bp)</div>
+    <table class="data compact"><tbody>
+      ${x.cs01_per_tenor.map((c) => `<tr><td>${esc(c.tenor)}</td>${numCell(c.cs01)}</tr>`).join("")}
+    </tbody></table>
+  </div>`;
+}
+
 function renderCurve({ per_leg, net, inputs_echo }, { ccy, body }) {
   const d = body.discount;
   const discTxt = d.mode === "flat" ? `${d.flat_rate}% flat` : d.curve.map((p) => `${p.tenor} ${p.value}%`).join(" / ");
@@ -495,14 +501,20 @@ function renderCurve({ per_leg, net, inputs_echo }, { ccy, body }) {
         <div class="value">${money(net.cs01_total_per_1bp, ccy)}${dirTag("cs01", net.cs01_total_per_1bp)}</div>
         <div class="foot">sum of leg CS01s</div></div>
       <div class="panel kpi"><div class="label">Net carry (30 days)</div>
-        <div class="value">${money(net.carry_monthly_30d, ccy)}${dirTag("pnl", net.carry_monthly_30d)}</div>
+        <div class="value">${money(net.carry_monthly_30d, ccy)}${dirTag("gain", net.carry_monthly_30d)}</div>
         <div class="foot">${money(net.carry_daily, ccy)} per day</div></div>
       <div class="panel kpi"><div class="label">Net rolldown (1 month)</div>
-        <div class="value">${money(net.rolldown_1m, ccy)}${dirTag("pnl", net.rolldown_1m)}</div>
+        <div class="value">${money(net.rolldown_1m, ccy)}${dirTag("gain", net.rolldown_1m)}</div>
         <div class="foot">carry + roll 1m ${money(net.carry_plus_roll_1m, ccy)}</div></div>
     </div>
 
-    <div class="panel card"><h3>Legs <span class="muted">· each leg priced on its own on the shared curve; ${ccy}, signed (+ pay / gain)</span></h3>
+    <h2 class="section">Per leg and net <span class="muted">· each leg priced on its own on the shared curve, as the CLI prints it; net = sum of the legs</span></h2>
+    <div class="leg-grid">
+      ${per_leg.map((l) => riskCard(`Leg ${l.leg}`, esc(l.display_heading.replace(/^Leg \d+: /, "")), l, ccy, false)).join("")}
+      ${riskCard("Net", `Sum of ${per_leg.length} legs`, net, ccy, true)}
+    </div>
+
+    <div class="panel card"><h3>Side by side <span class="muted">· ${ccy}, signed (+ pay / gain)</span></h3>
       <div class="scroll-x"><table class="data">
         <thead><tr><th>#</th><th>Side</th><th class="num">Notional</th><th>Tenor</th><th>Maturity</th><th class="num">Cpn</th>
           <th class="num">Par bp</th><th class="num">Upfront</th><th class="num">CS01</th><th class="num">Carry 1d</th><th class="num">Carry 30d</th>
@@ -515,21 +527,8 @@ function renderCurve({ per_leg, net, inputs_echo }, { ccy, body }) {
       <p class="fineprint">Upfront: + = cash this side pays. CS01: + = gains if spreads widen 1bp. Carry / rolldown: + = gain. Net figures are simple sums of the legs.</p>
     </div>
 
-    <div class="cards">
-      <div class="panel card"><h3>Net CS01 by tenor <span class="muted">· ${ccy} per +1bp on each pillar</span></h3>
-        ${barChart(net.cs01_per_tenor.map((c) => ({ label: c.tenor, v: c.cs01 })), ccy)}
-      </div>
-      <div class="panel card"><h3>Carry &amp; rolldown, net</h3>
-        <table class="kv">
-          <tr><td>Carry, 1 day</td><td>${money(net.carry_daily, ccy)} ${dirTag("pnl", net.carry_daily)}</td></tr>
-          <tr><td>Carry, 30 days</td><td>${money(net.carry_monthly_30d, ccy)} ${dirTag("pnl", net.carry_monthly_30d)}</td></tr>
-          <tr><td>Rolldown, 1 day</td><td>${money(net.rolldown_1d, ccy)} ${dirTag("pnl", net.rolldown_1d)}</td></tr>
-          <tr><td>Rolldown, 1 week</td><td>${money(net.rolldown_1w, ccy)} ${dirTag("pnl", net.rolldown_1w)}</td></tr>
-          <tr><td>Rolldown, 1 month</td><td>${money(net.rolldown_1m, ccy)} ${dirTag("pnl", net.rolldown_1m)}</td></tr>
-          <tr><td>Carry + roll, 1 day</td><td>${money(net.carry_plus_roll_1d, ccy)} ${dirTag("pnl", net.carry_plus_roll_1d)}</td></tr>
-          <tr><td>Carry + roll, 1 month</td><td>${money(net.carry_plus_roll_1m, ccy)} ${dirTag("pnl", net.carry_plus_roll_1m)}</td></tr>
-        </table>
-      </div>
+    <div class="panel card"><h3>Net CS01 by tenor <span class="muted">· ${ccy} per +1bp on each pillar</span></h3>
+      ${barChart(net.cs01_per_tenor.map((c) => ({ label: c.tenor, v: c.cs01 })), ccy)}
     </div>
 
     <div class="panel card"><h3>CS01 bucket matrix <span class="muted">· ${ccy} per +1bp</span></h3>
