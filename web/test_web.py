@@ -77,9 +77,11 @@ class CurveTradeTest(unittest.TestCase):
         self.assertEqual(out["per_leg"][0]["cs01_total_per_1bp"], round(ref.cs01_total, 2))
         self.assertEqual(out["per_leg"][0]["carry_daily"], round(ref.carry_daily, 2))
 
-    def test_needs_two_legs(self):
+    def test_exactly_two_legs(self):
         with self.assertRaises(ValueError):
             server.price_curve({**self.BODY, "legs": self.BODY["legs"][:1]})
+        with self.assertRaises(ValueError):
+            server.price_curve({**self.BODY, "legs": self.BODY["legs"] * 2})
 
 
 if __name__ == "__main__":

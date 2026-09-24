@@ -374,8 +374,7 @@ function addLeg({ side = "buy", notional = "10,000,000", tenor = "5Y", coupon = 
   const el = document.createElement("div");
   el.className = "leg";
   el.innerHTML = `
-    <div class="leg-head"><span class="leg-title"></span>
-      <button type="button" class="icon-btn" aria-label="Remove leg" style="width:24px;height:24px">×</button></div>
+    <div class="leg-head"><span class="leg-title"></span></div>
     <div class="seg small" role="radiogroup" aria-label="Side">
       <input type="radio" name="leg${id}-side" id="leg${id}-b" value="buy" ${side === "buy" ? "checked" : ""}><label for="leg${id}-b">Buy protection</label>
       <input type="radio" name="leg${id}-side" id="leg${id}-s" value="sell" ${side === "sell" ? "checked" : ""}><label for="leg${id}-s">Sell protection</label>
@@ -385,9 +384,6 @@ function addLeg({ side = "buy", notional = "10,000,000", tenor = "5Y", coupon = 
       <label>Tenor<input class="l-tenor" value="${esc(tenor)}"></label>
       <label>Coupon bp<input class="l-coupon" inputmode="decimal" value="${esc(coupon)}"></label>
     </div>`;
-  $(".leg-head button", el).onclick = () => {
-    if ($$(".leg", legsRoot).length > 2) { el.remove(); renumber(); }
-  };
   legsRoot.append(el);
   renumber();
 }
@@ -398,14 +394,8 @@ function setLegs(legs) { legsRoot.innerHTML = ""; legs.forEach(addLeg); }
 const PRESETS = {
   steepener: [{ side: "sell", notional: "10,000,000", tenor: "5Y" }, { side: "buy", notional: "6,400,000", tenor: "10Y" }],
   flattener: [{ side: "buy", notional: "10,000,000", tenor: "5Y" }, { side: "sell", notional: "6,400,000", tenor: "10Y" }],
-  fly: [
-    { side: "buy", notional: "7,450,000", tenor: "3Y" },
-    { side: "sell", notional: "10,000,000", tenor: "5Y" },
-    { side: "buy", notional: "3,950,000", tenor: "7Y" },
-  ],
 };
 $$("[data-preset]").forEach((b) => (b.onclick = () => setLegs(PRESETS[b.dataset.preset])));
-$("#add-leg").onclick = () => addLeg();
 setLegs(PRESETS.steepener);
 
 bindSubmit(cForm, cOut, () => {

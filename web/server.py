@@ -147,8 +147,8 @@ NET_FIELDS = (
 
 def price_curve(body: dict) -> dict:
     legs_in = body.get("legs")
-    if not isinstance(legs_in, list) or len(legs_in) < 2:
-        raise ValueError("a curve trade needs at least two legs")
+    if not isinstance(legs_in, list) or len(legs_in) != 2:
+        raise ValueError("a curve trade takes exactly two legs")
     legs = []
     for i, leg in enumerate(legs_in, start=1):
         try:
