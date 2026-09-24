@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ISDA CDS Pricer</title>
+  <meta name="description" content="Browser front end for a pure-Python ISDA CDS Standard Model engine.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 24 C10 24 12 10 16 10 S22 18 28 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="28" cy="8" r="2.5" fill="currentColor"/></svg>
+      <div>
+        <h1>ISDA CDS Pricer</h1>
+        <p class="sub">Standard Model · O'Kane–Turnbull · Markit 2012 fix</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" class="tab active" data-view="single" aria-selected="true">Single trade</button>
+      <button role="tab" class="tab" data-view="curve" aria-selected="false">Curve trade</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ================= SINGLE TRADE ================= -->
+    <section class="view" id="view-single">
+      <form class="panel form" id="single-form" novalidate>
+        <h2>Trade</h2>
+        <div class="seg" role="radiogroup" aria-label="Side">
+          <input type="radio" name="side" id="s-buy" value="buy" checked><label for="s-buy">Buy protection</label>
+          <input type="radio" name="side" id="s-sell" value="sell"><label for="s-sell">Sell protection</label>
+        </div>
+        <div class="grid2">
+          <label>Notional<input name="notional" inputmode="decimal" value="10,000,000"></label>
+          <label>Currency
+            <select name="currency"><option>USD</option><option>EUR</option><option>GBP</option><option>JPY</option><option>CHF</option></select>
+          </label>
+          <label>Tenor
+            <select name="tenor">
+              <option>6M</option><option>1Y</option><option>2Y</option><option>3Y</option><option>4Y</option>
+              <option selected>5Y</option><option>7Y</option><option>10Y</option>
+            </select>
+          </label>
+          <label><span>Maturity <span class="unit mat-note"></span></span><input type="date" name="maturity_date"></label>
+          <label>Trade date<input type="date" name="trade_date"></label>
+          <label><span>Traded spread <span class="unit">bp</span></span><input name="traded_spread_bps" inputmode="decimal" value="160"></label>
+          <label>Running coupon
+            <select name="coupon_bps"><option value="25">25 bp</option><option value="100" selected>100 bp</option><option value="300">300 bp</option><option value="500">500 bp</option><option value="1000">1000 bp</option></select>
+          </label>
+          <label><span>Recovery <span class="unit">%</span></span><input name="recovery_pct" inputmode="decimal" value="40"></label>
+        </div>
+
+        <h2>Discount curve</h2>
+        <div class="disc" data-scope="single"></div>
+
+        <button class="primary" type="submit">Price trade</button>
+      </form>
+
+      <div class="results" id="single-results">
+        <div class="empty">
+          <p>Enter a trade and press <strong>Price trade</strong>.</p>
+          <p class="muted">Every figure comes from the <code>isda_cds</code> engine — no numbers are computed in the browser.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CURVE TRADE ================= -->
+    <section class="view" id="view-curve" hidden>
+      <form class="panel form" id="curve-form" novalidate>
+        <h2>Reference entity</h2>
+        <div class="grid2">
+          <label>Trade date<input type="date" name="trade_date"></label>
+          <label>Currency
+            <select name="currency"><option>USD</option><option>EUR</option><option>GBP</option><option>JPY</option><option>CHF</option></select>
+          </label>
+          <label><span>Recovery <span class="unit">%</span></span><input name="recovery_pct" inputmode="decimal" value="40"></label>
+        </div>
+        <h2>Credit curve <span class="hint">par spreads, bp</span></h2>
+        <div class="curve-editor" id="curve-credit"></div>
+
+        <h2>Discount curve</h2>
+        <div class="disc" data-scope="curve"></div>
+
+        <h2>Legs</h2>
+        <div class="seg small" role="radiogroup" aria-label="Number of legs">
+          <input type="radio" name="leg_count" id="lc-1" value="1" checked><label for="lc-1">1 leg</label>
+          <input type="radio" name="leg_count" id="lc-2" value="2"><label for="lc-2">2 legs (curve trade)</label>
+        </div>
+        <div class="presets">
+          <span class="muted">Presets:</span>
+          <button type="button" class="chip" data-preset="steepener">5s10s steepener</button>
+          <button type="button" class="chip" data-preset="flattener">5s10s flattener</button>
+        </div>
+        <div id="legs"></div>
+
+        <button class="primary" type="submit">Price curve trade</button>
+      </form>
+
+      <div class="results" id="curve-results">
+        <div class="empty">
+          <p>Price one leg on a full credit curve, or switch to <strong>2 legs</strong> for a curve trade.</p>
+          <p class="muted">One leg is priced through the terminal agent's <code>price_cds</code> path, two legs through <code>price_curve_trade</code>.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Pure-Python ISDA CDS Standard Model · SNAC conventions · ACT/360 fee accrual, semiannual roll ·
+    weekend-only business-day calendar. Demo only — not investment advice.
+  </footer>
+
+  <div class="tooltip" id="tooltip" role="status" hidden></div>
+
+  <template id="tpl-disc">
+    <div class="seg small" role="radiogroup" aria-label="Discount curve">
+      <input type="radio" value="flat" checked><label>Flat rate</label>
+      <input type="radio" value="curve"><label>Zero curve</label>
+    </div>
+    <div class="disc-flat">
+      <label><span>Flat zero rate <span class="unit">%</span></span><input name="flat_rate" inputmode="decimal" value="3.5"></label>
+    </div>
+    <div class="disc-curve" hidden><div class="curve-editor"></div></div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
