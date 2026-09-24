@@ -4,11 +4,57 @@ A pure-Python implementation of the ISDA CDS Standard Model pricing engine, port
 
 **Zero dependencies** — Python 3.10+ standard library only (`math`, `datetime`, `dataclasses`, `re`).
 
+## Installation
+
+Needs Python 3.10 or newer. From a clone of the repo, ideally inside a virtual environment:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -e .                                      # core engine: installs nothing else
+```
+
+The core `isda_cds` package has **no runtime dependencies**; `pip install -e .` adds only the package itself. Optional extras:
+
+| Extra | Installs | Needed for |
+|---|---|---|
+| `test` | `pytest` | running the test suite |
+| `web` | nothing (standard library only) | the web front end; the extra exists for completeness |
+| `validation` | `QuantLib` (large, compiled) | `quantlib_crosscheck.py` only; never needed to price |
+
+```bash
+pip install -e ".[test]"            # engine + pytest
+pip install -e ".[validation]"      # engine + QuantLib, for the cross-check
+```
+
+Only `isda_cds` is packaged. `cds_agent.py`, `web/`, `example.py` and `quantlib_crosscheck.py` are scripts you run from the repo root.
+
+## Running the tests
+
+```bash
+pip install -e ".[test]"
+pytest
+```
+
+Run from the repo root, `pytest` picks up the whole suite (configured in `pyproject.toml`): `test_pricer.py` (engine), `test_agent_mock.py` (agent, against a fake model server, no LLM needed) and `web/test_web.py` (web API). No network or model server is needed.
+
+Without pytest, the standard library runner works too:
+
+```bash
+python3 -m unittest test_pricer test_agent_mock web.test_web -v
+```
+
+External validation against QuantLib (optional, run once before trusting the engine):
+
+```bash
+pip install -e ".[validation]"
+python3 quantlib_crosscheck.py
+```
+
 ## Quick start
 
 ```bash
 python3 example.py                     # runnable end-to-end demo
-python3 -m unittest test_pricer -v     # 18-test validation suite
+python3 web/server.py                  # web front end on http://127.0.0.1:8000
 ```
 
 Minimal usage:
@@ -40,8 +86,9 @@ A browser UI for the engine lives in `web/`. It is a separate entry point: it im
 python3 web/server.py                       # then open http://127.0.0.1:8000
 python3 web/server.py --port 9000           # another port
 python3 web/server.py --host 0.0.0.0        # reachable from other machines on your network
-python3 -m unittest web.test_web -v         # API tests
 ```
+
+Run it from the repo root; it needs no extra packages (`pip install -e .` is optional; the server finds `isda_cds` next to it either way).
 
 - **Single trade** — side, notional, currency, tenor, maturity, trade date, traded spread, running coupon, recovery, and a discount curve (flat zero rate by default, or a zero-rate term curve). The traded spread becomes a single credit-curve pillar at the trade tenor, as in the CLI. Shows upfront (clean, dirty, accrued, as cash with pay/receive), prices, par spread, RPV01, protection and premium legs, survival to maturity, CS01 (total and by tenor), carry, and 1d/1w/1m rolldown, plus the bootstrapped survival curve.
 - **Curve trade** — one or two legs on a full credit curve. A **1 leg / 2 legs** switch picks the mode; it defaults to one leg, where Leg 2 is hidden and ignored. One leg is priced through `cds_agent.execute_price_cds` (the agent's `price_cds` tool), two legs through `cds_agent.execute_price_curve_trade` (`price_curve_trade`). Two-leg presets: 5s10s steepener and flattener, notionals roughly CS01-neutral on the default curve. With two legs, the page shows each leg on its own, as the CLI does (upfront, CS01 total and by tenor, carry, rolldown), next to a **net** block with the same figures summed across the legs. A side-by-side table and a CS01 bucket matrix (leg × tenor, with a net row) are shown below. With one leg, only that leg's figures are shown (no net).
@@ -64,6 +111,7 @@ python3 -m unittest web.test_web -v         # API tests
 | `isda_cds/analytics.py` | `run_pricer`: orchestrates bootstrap + pricing, CS01 (parallel and per-tenor via re-bootstrap), carry (static curves), rolldown (1d/1w/1m re-anchored curves), curve diagnostics |
 | `example.py` | End-to-end demo, prints every analytic |
 | `test_pricer.py` | Validation suite (stdlib `unittest`, 18 tests) |
+| `pyproject.toml` | Packaging (`isda_cds` only, no runtime dependencies), optional extras `test` / `web` / `validation`, pytest configuration |
 
 ## The maths (summary)
 
