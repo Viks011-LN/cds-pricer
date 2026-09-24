@@ -35,8 +35,6 @@ These figures come from `quantlib_crosscheck.py` run against QuantLib 1.43; re-r
 - the bootstrap repricing every pillar to zero clean upfront at its quoted par spread
 - the ISDA flat-curve identity: a flat 100bp par curve against a 100bp coupon gives ~0 upfront (`~1e-13 %`) and exactly 100bp par spread
 
-The engine is also a 1:1 port of a TypeScript engine, and `diff` of both example outputs shows no numeric differences. That parity is a regression check, not independent validation.
-
 ## Features
 
 ### Single-trade pricing
