@@ -32,6 +32,29 @@ res = run_pricer(req)
 print(res.upfront_pct, res.cs01_total, res.carry_daily, res.rolldown_1m)
 ```
 
+## Web front end (demo)
+
+A browser UI for the engine lives in `web/`. It is a separate entry point: it imports `isda_cds` (and, for curve trades, the agent's `price_curve_trade` executor from `cds_agent.py`) without changing either, and the terminal CLI works exactly as before. Like the engine, it has **no dependencies** — the server is Python's standard-library `http.server`, the page is plain HTML/CSS/JS.
+
+```bash
+python3 web/server.py                       # then open http://127.0.0.1:8000
+python3 web/server.py --port 9000           # another port
+python3 web/server.py --host 0.0.0.0        # reachable from other machines on your network
+python3 -m unittest web.test_web -v         # API tests
+```
+
+- **Single trade** — side, notional, currency, tenor (or a custom maturity date), trade date, traded spread, running coupon, recovery, and a discount curve (flat zero rate by default, or a zero-rate term curve). Shows upfront (clean, dirty, accrued, as cash with pay/receive), prices, par spread, RPV01, protection and premium legs, survival to maturity, CS01 (total and by tenor), carry, and 1d/1w/1m rolldown, plus the bootstrapped survival curve.
+  - The traded spread becomes a single credit-curve pillar at the trade tenor, as in the CLI.
+  - **MTM P&L** (optional): enter a current market spread or a market credit curve. The P&L is the clean upfront at market minus the clean upfront at the traded spread, both from `run_pricer` on the same valuation date and signed for the trade side. Risk, carry and rolldown are then measured on the market curve.
+- **Curve trade** — two or more legs on one shared credit curve (steepeners, flatteners, butterflies; presets included, notionals roughly CS01-neutral on the default curve). Each leg is priced through `cds_agent.execute_price_curve_trade`, the path behind the agent's `price_curve_trade` tool. The page shows per-leg results, net figures (plain sums of the legs: upfront, CS01, carry, rolldown), and a CS01 bucket matrix by tenor.
+- Currency is a display label only; the engine does not depend on currency.
+
+| File | Contents |
+|---|---|
+| `web/server.py` | JSON API (`POST /api/price`, `POST /api/curve-trade`) and static file server |
+| `web/static/` | `index.html`, `style.css`, `app.js`: the single-page app (light and dark themes, mobile-friendly) |
+| `web/test_web.py` | Checks the API against the engine: identical numbers, MTM sign, net = sum of legs |
+
 ## Package layout
 
 | File | Contents |
